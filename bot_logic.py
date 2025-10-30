@@ -55,7 +55,7 @@ def image_generation_worker(chat_id, message_id, image_prompt, session, waiting_
     image_urls = services.generate_image_from_prompt(image_prompt)
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
     if image_urls:
-        photo_message = tg.send_photo(chat_id, image_urls[0], caption=f"تم إنشاء الصورة بنجاح.\n\n📝 الوصف: {image_prompt}", reply_to_message_id=message_id)
+        photo_message = tg.send_photo(chat_id, image_urls[0], caption=f"تم إنشاء الصورة بنجاح.", reply_to_message_id=message_id)
         if photo_message and photo_message.get('ok'):
             sent_message = photo_message['result']
             photo_file_id = sent_message['photo'][-1]['file_id']
@@ -84,7 +84,7 @@ def edit_image_worker(chat_id, message_id, image_file_id, edit_prompt, session, 
     final_image_url = services.poll_for_editing_result(job_id)
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
     if final_image_url:
-        photo_message = tg.send_photo(chat_id, final_image_url, caption=f"تم تعديل الصورة بنجاح.\n\n📝 تعليمات التعديل: {edit_prompt}", reply_to_message_id=message_id)
+        photo_message = tg.send_photo(chat_id, final_image_url, caption=f"تم تعديل الصورة بنجاح.", reply_to_message_id=message_id)
         if photo_message and photo_message.get('ok'):
             sent_message = photo_message['result']
             photo_file_id = sent_message['photo'][-1]['file_id']
@@ -156,7 +156,7 @@ def video_generation_worker(chat_id, message_id, prompt, start_job_function, fil
             tg.edit_message_text(chat_id, status_message_id, "تم إلغاء عملية إنشاء الفيديو.")
         elif video_url:
             tg.edit_message_text(chat_id, status_message_id, "اكتمل إنشاء الفيديو! جاري الإرسال...")
-            tg.send_video(chat_id, video_url, caption=f"فيديو من: {start_job_function.__name__}\n\n📝: {prompt}", reply_to_message_id=message_id)
+            tg.send_video(chat_id, video_url, caption=f"فيديو من: {start_job_function.__name__}", reply_to_message_id=message_id)
             tg.delete_message(chat_id, status_message_id)
         else:
             tg.edit_message_text(chat_id, status_message_id, "فشلت عملية إنشاء الفيديو أو استغرقت وقتاً طويلاً.")
