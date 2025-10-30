@@ -142,12 +142,122 @@ def _start_video_job(api_url, payload):
 def start_veo_text_to_video_job(prompt):
     print("Starting VEO TEXT-TO-VIDEO generation...")
     # ملاحظة: لا يوجد payload رسمي لـ VEO text-to-video، سنستخدم sora كبديل مؤقت
-    payload = { "prompt": prompt, "selectedModel": { "id": 136, "versionInfo": { "id": 169, "modelPath": "fal-ai/sora-2/text-to-video"}}, "width": 1280, "height": 720, "duration": 12, "aspect_ratio": "16:9", "resolution": "720p"}
+    payload = { "prompt": prompt,    "selectedModel": {
+                "id": 84,
+                "label": "Veo3",
+                "purpose": "Video",
+                "type": "Checkpoint",
+                "description": "veo 3 is effectively acting as a camera operator, set designer, and editor that gets your script – following stage directions about characters and camera angles with newfound accuracy.",
+                "baseModel": "Veo3",
+                "versionInfo": {
+                    "id": 97,
+                    "index": None,
+                    "name": "1.0 Text",
+                    "description": None,
+                    "modelId": 84,
+                    "trainedWords": [],
+                    "steps": None,
+                    "epochs": None,
+                    "clipSkip": None,
+                    "vaeId": None,
+                    "createdAt": "2025-06-18T06:40:31.421Z",
+                    "updatedAt": "2025-09-09T03:16:59.081Z",
+                    "publishedAt": None,
+                    "status": "Published",
+                    "trainingStatus": None,
+                    "trainingDetails": None,
+                    "inaccurate": False,
+                    "baseModel": "Veo3",
+                    "baseModelType": None,
+                    "meta": {},
+                    "earlyAccessTimeFrame": 0,
+                    "requireAuth": False,
+                    "settings": None,
+                    "availability": "Public",
+                    "creditCost": 300,
+                    "creditCostConfig": {
+                        "8": 300
+                    },
+                    "isActive": True,
+                    "modelPath": "fal-ai/veo3",
+                    "baseModelSetType": None,
+                    "type": "TextToVideo",
+                    "uploadType": "Created",
+                    "files": []
+                },
+                "checkpoint": ""
+            },
+            "width": 1280,
+            "height": 720,
+            "duration": 5,
+            "aspect_ratio": "16:9",
+            "mediaId": "cmfu0511e0468ypgv5rab1h67",
+            "fps": 24,
+            "advanced": {
+                "videoDuration": 5,
+                "videoAspectRatio": "16:9"
+            }
+        }
     return _start_video_job("https://www.basedlabs.ai/api/generate/text-to-video", payload)
 
 def start_veo_image_to_video_job(prompt, image_url, media_id):
     print("Starting VEO IMAGE-TO-VIDEO generation...")
-    payload = {"prompt": prompt, "image_url": image_url, "model": {"id": 84, "label": "Veo3", "versionInfo": {"id": 144, "modelPath": "fal-ai/veo3/image-to-video", "type": "ImageToVideo"}}, "width": 1024, "height": 1024, "duration": 8, "mediaId": media_id, "sourceMedia": image_url, "motion_bucket_id": 60, "generate_audio": True, "resolution": "1080p", "aspect_ratio": "auto"}
+    payload = {"prompt": prompt, "image_url": image_url, "model": {
+    "id": 84,
+    "label": "Veo3",
+    "purpose": "Video",
+    "type": "Checkpoint",
+    "description": "veo 3 is effectively acting as a camera operator, set designer, and editor that gets your script – following stage directions about characters and camera angles with newfound accuracy.",
+    "baseModel": "Veo3",
+    "versionInfo": {
+      "id": 144,
+      "index": None,
+      "name": "1.0 Image",
+      "description": None,
+      "modelId": 84,
+      "trainedWords": [],
+      "steps": None,
+      "epochs": None,
+      "clipSkip": None,
+      "vaeId": None,
+      "createdAt": "2025-08-02T02:10:24.730Z",
+      "updatedAt": "2025-09-09T03:15:45.253Z",
+      "publishedAt": None,
+      "status": "Published",
+      "trainingStatus": None,
+      "trainingDetails": None,
+      "inaccurate": False,
+      "baseModel": "Veo3",
+      "baseModelType": None,
+      "meta": {},
+      "earlyAccessTimeFrame": 0,
+      "requireAuth": False,
+      "settings": None,
+      "availability": "Public",
+      "creditCost": 300,
+      "creditCostConfig": {
+        "8": 300
+      },
+      "isActive": True,
+      "modelPath": "fal-ai/veo3/image-to-video",
+      "baseModelSetType": None,
+      "type": "ImageToVideo",
+      "uploadType": "Created",
+      "files": []
+    },
+    "checkpoint": "",
+    "version": "1.0 Image"
+  },
+  "width": 1024,
+  "height": 1024,
+  "duration": 8,
+  "mediaId": "cmgfopat300laz6e9n9h4uxja",
+  "sourceMedia": image_url,
+  "motion_bucket_id": 60,
+  "generate_audio": True,
+  "resolution": "1080p",
+  "aspect_ratio": "auto"
+}
     return _start_video_job("https://www.basedlabs.ai/api/generate/video", payload)
 
 def start_sora_text_to_video_job(prompt):
@@ -157,12 +267,127 @@ def start_sora_text_to_video_job(prompt):
 
 def start_sora_image_to_video_job(prompt, image_url, media_id):
     print("Starting SORA IMAGE-TO-VIDEO generation...")
-    payload = {"prompt": prompt,"image_url": image_url,"model": {"id": 136,"label": "Sora","purpose": "Video","type": "Checkpoint","description": "This video generation model is more physically accurate, realistic, and more controllable than prior systems. It also features synchronized dialogue and sound effects.","baseModel": "sora","versionInfo": {"id": 170,"name": "2","modelId": 136,"createdAt": "2025-10-06T21:00:59.007Z","updatedAt": "2025-10-06T21:52:44.257Z","status": "Published","baseModel": "sora","creditCost": 40,"creditCostConfig": {"4": 40,"8": 80,"12": 120},"isActive": True,"modelPath": "fal-ai/sora-2/image-to-video","type": "ImageToVideo"},"checkpoint": ""},"width": 1024,"height": 1024,"duration": 12,"mediaId": media_id,"sourceMedia": image_url,"motion_bucket_id": 60,"generate_audio": True,"resolution": "720p","aspect_ratio": "auto"}
+    payload = {"prompt": prompt,"image_url": image_url,  "model": {
+    "id": 136,
+    "label": "Sora",
+    "purpose": "Video",
+    "type": "Checkpoint",
+    "description": "This video generation model is more physically accurate, realistic, and more controllable than prior systems. It also features synchronized dialogue and sound effects.",
+    "baseModel": "sora",
+    "versionInfo": {
+      "id": 170,
+      "index": None,
+      "name": "2",
+      "description": None,
+      "modelId": 136,
+      "trainedWords": [],
+      "steps": None,
+      "epochs": None,
+      "clipSkip": None,
+      "vaeId": None,
+      "createdAt": "2025-10-06T21:00:59.007Z",
+      "updatedAt": "2025-10-06T21:52:44.257Z",
+      "publishedAt": None,
+      "status": "Published",
+      "trainingStatus": None,
+      "trainingDetails": None,
+      "inaccurate": False,
+      "baseModel": "sora",
+      "baseModelType": None,
+      "meta": {},
+      "earlyAccessTimeFrame": 0,
+      "requireAuth": False,
+      "settings": None,
+      "availability": "Public",
+      "creditCost": 40,
+      "creditCostConfig": {
+        "4": 40,
+        "8": 80,
+        "12": 120
+      },
+      "isActive": True,
+      "modelPath": "fal-ai/sora-2/image-to-video",
+      "baseModelSetType": None,
+      "type": "ImageToVideo",
+      "uploadType": "Created",
+      "isDefault": False,
+      "autoUpscale": False,
+      "files": []
+    },
+    "checkpoint": ""
+  },
+  "width": 1024,
+  "height": 1024,
+  "duration": 12,
+  "mediaId": "cmhdek3if03l6yifsr2b2athb",
+  "sourceMedia": image_url,
+  "motion_bucket_id": 60,
+  "generate_audio": True,
+  "resolution": "720p",
+  "aspect_ratio": "auto"
+}
     return _start_video_job("https://www.basedlabs.ai/api/generate/video", payload)
 
 def start_kling_image_to_video_job(prompt, image_url, media_id):
     print("Starting KLING IMAGE-TO-VIDEO generation...")
-    payload = {"prompt": prompt,"image_url": image_url,"model": {"id": 118,"label": "Kling","purpose": "Video","type": "Checkpoint","description": "Kling model for video generation","baseModel": "Kling","versionInfo": {"id": 167,"name": "2.5 Turbo","modelId": 118,"createdAt": "2025-09-23T21:57:59.791Z","updatedAt": "2025-09-23T21:58:40.950Z","status": "Published","baseModel": "Kling","creditCost": 50,"creditCostConfig": {"5": 50,"10": 100},"isActive": True,"modelPath": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video","type": "ImageToVideo"},"checkpoint": ""},"width": 447,"height": 447,"duration": 10,"mediaId": media_id,"sourceMedia": image_url,"motion_bucket_id": 60,"generate_audio": True,"resolution": "720p","aspect_ratio": "auto"}
+    payload = {"prompt": prompt,"image_url": image_url,  "model": {
+    "id": 118,
+    "label": "Kling",
+    "purpose": "Video",
+    "type": "Checkpoint",
+    "description": "Kling model for video generation",
+    "baseModel": "Kling",
+    "versionInfo": {
+      "id": 167,
+      "index": None,
+      "name": "2.5 Turbo",
+      "description": None,
+      "modelId": 118,
+      "trainedWords": [],
+      "steps": None,
+      "epochs": None,
+      "clipSkip": None,
+      "vaeId": None,
+      "createdAt": "2025-09-23T21:57:59.791Z",
+      "updatedAt": "2025-09-23T21:58:40.950Z",
+      "publishedAt": None,
+      "status": "Published",
+      "trainingStatus": None,
+      "trainingDetails": None,
+      "inaccurate": False,
+      "baseModel": "Kling",
+      "baseModelType": None,
+      "meta": {},
+      "earlyAccessTimeFrame": 0,
+      "requireAuth": False,
+      "settings": None,
+      "availability": "Public",
+      "creditCost": 50,
+      "creditCostConfig": {
+        "5": 50,
+        "10": 100
+      },
+      "isActive": True,
+      "modelPath": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+      "baseModelSetType": None,
+      "type": "ImageToVideo",
+      "uploadType": "Created",
+      "isDefault": False,
+      "autoUpscale": False,
+      "files": []
+    },
+    "checkpoint": ""
+  },
+  "width": 447,
+  "height": 447,
+  "duration": 10,
+  "mediaId": "cmh8pnlhu06ne0rfh6sw7zyd9",
+  "sourceMedia": image_url,
+  "motion_bucket_id": 60,
+  "generate_audio": True,
+  "resolution": "720p",
+  "aspect_ratio": "auto"
+}
     return _start_video_job("https://www.basedlabs.ai/api/generate/video", payload)
 
 def poll_for_video_result(request_id, history_id, cancel_event):
