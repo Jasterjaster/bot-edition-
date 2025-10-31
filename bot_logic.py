@@ -11,32 +11,33 @@ import services
 # --- الإعدادات العامة ---
 USER_STATES = {} 
 ACTIVE_VIDEO_JOBS = {} 
+TEMP_DIR = 'temp_images'
+if not os.path.exists(TEMP_DIR):
+    os.makedirs(TEMP_DIR)
 
 
 # --- لوحات المفاتيح (Keyboards) ---
 MAIN_KEYBOARD = {
     "inline_keyboard": [
         [{"text": "🖼️ إنشاء صورة", "callback_data": "generate_image"}, {"text": "✨ تحسين الوصف (Prompt)", "callback_data": "enhance_prompt"}],
-        [{"text": "📄 وصف صورة", "callback_data": "describe_image"}, {"text": "🎨 تعديل آخر صورة", "callback_data": "edit_last_image"}],
+        [{"text": "📄 وصف صورة", "callback_data": "describe_image"}, {"text": "🎨 تعديل صورة", "callback_data": "edit_image_start"}],
         [{"text": "🎞️ إنشاء فيديو", "callback_data": "create_video"}]
     ]
 }
 
-# --- [مُعدل] لوحة مفاتيح اختيار الفيديو ---
 VIDEO_MODEL_SELECTION_KEYBOARD = {
     "inline_keyboard": [
         [
             {"text": "VEO", "callback_data": "select_model:veo"},
-            {"text": "Kling", "callback_data": "select_model:kling"}
+            {"text": "Sora", "callback_data": "select_model:sora"}
         ],
         [
-            {"text": "Sora", "callback_data": "select_model:sora"},
-            {"text": "Sora Pro ✨", "callback_data": "select_model:sora_pro"}
+            {"text": "Sora Pro", "callback_data": "select_model:sora_pro"},
+            {"text": "Kling", "callback_data": "select_model:kling"}
         ],
         [{"text": "⬅️ عودة للقائمة الرئيسية", "callback_data": "back_to_main"}]
     ]
 }
-
 
 VEO_SORA_OPTIONS_KEYBOARD = {
     "inline_keyboard": [
@@ -49,6 +50,15 @@ KLING_OPTIONS_KEYBOARD = {
     "inline_keyboard": [
         [{"text": "🖼️ من صورة ونص", "callback_data": "type_select:from_image"}],
         [{"text": "⬅️ عودة لاختيار الموديل", "callback_data": "back_to_model_select"}]
+    ]
+}
+
+PROMPT_ENHANCE_CONFIRMATION_KEYBOARD = {
+    "inline_keyboard": [
+        [
+            {"text": "✅ نعم، قم بالتحسين", "callback_data": "confirm_enhance_video_prompt"},
+            {"text": "❌ لا، ابدأ بالوصف الحالي", "callback_data": "skip_enhance_video_prompt"}
+        ]
     ]
 }
 
@@ -65,50 +75,42 @@ def image_generation_worker(chat_id, message_id, image_prompt, session, waiting_
             sent_message = photo_message['result']
             photo_file_id = sent_message['photo'][-1]['file_id']
             sent_message_id = sent_message['message_id']
-            keyboard = {"inline_keyboard": [[{"text": "🎨 تعديل هذه الصورة", "callback_data": f"edit_image:{photo_file_id}"}]]}
-            tg.edit_message_reply_markup(chat_id, sent_message_id, keyboard)
+            # keyboard = {"inline_keyboard": [[{"text": "🎨 تعديل هذه الصورة", "callback_data": f"edit_image:{photo_file_id}"}]]}
+            # tg.edit_message_reply_markup(chat_id, sent_message_id, keyboard)
             session['last_image_file_id'] = photo_file_id
     else:
         tg.send_message(chat_id, "حدث خطأ أثناء إنشاء الصورة. يرجى المحاولة مرة أخرى.", reply_to_message_id=message_id)
+    tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
 
-def edit_image_worker(chat_id, message_id, image_file_id, edit_prompt, session, waiting_message_id):
+def edit_image_worker(chat_id, message_id, image_file_id, edit_prompt, waiting_message_id):
     tg.send_chat_action(chat_id, "upload_photo")
     file_path = tg.get_file_path(image_file_id)
     if not file_path:
         if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
         tg.send_message(chat_id, "خطأ: لم أتمكن من تحميل الصورة من تيليجرام.", reply_to_message_id=message_id); return
-    
-    # تحميل الصورة كبايتات مباشرة
-    original_image_data = tg.download_image_as_bytes(file_path)
-    if not original_image_data:
+
+    image_bytes = tg.download_image_as_bytes(file_path)
+    if not image_bytes:
         if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
         tg.send_message(chat_id, "خطأ: فشل تحميل بيانات الصورة.", reply_to_message_id=message_id); return
-        
-    # استدعاء الدوال الجديدة بالترتيب
-    uploaded_url = services.upload_image_for_editing(original_image_data, file_name=f"{uuid.uuid4()}.jpg")
-    if not uploaded_url:
-        if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
-        tg.send_message(chat_id, "خطأ: فشل رفع الصورة لخدمة التعديل.", reply_to_message_id=message_id); return
 
-    job_id = services.start_image_editing_job(uploaded_url, edit_prompt)
-    if not job_id:
-        if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
-        tg.send_message(chat_id, "خطأ: فشل بدء مهمة تعديل الصورة.", reply_to_message_id=message_id); return
+    local_photo_path = os.path.join(TEMP_DIR, f'{chat_id}_{uuid.uuid4()}.jpg')
+    with open(local_photo_path, 'wb') as f:
+        f.write(image_bytes)
 
-    final_image_url = services.poll_for_editing_result(job_id)
+    final_image_url = services.edit_image_with_digen(local_photo_path, edit_prompt)
+    
+    # تنظيف الملف المؤقت
+    if os.path.exists(local_photo_path):
+        os.remove(local_photo_path)
+    
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
     
     if final_image_url:
-        photo_message = tg.send_photo(chat_id, final_image_url, caption=f"تم تعديل الصورة بنجاح.", reply_to_message_id=message_id)
-        if photo_message and photo_message.get('ok'):
-            sent_message = photo_message['result']
-            photo_file_id = sent_message['photo'][-1]['file_id']
-            sent_message_id = sent_message['message_id']
-            keyboard = {"inline_keyboard": [[{"text": "🎨 تعديل هذه الصورة", "callback_data": f"edit_image:{photo_file_id}"}]]}
-            tg.edit_message_reply_markup(chat_id, sent_message_id, keyboard)
-            session['last_image_file_id'] = photo_file_id
+        tg.send_photo(chat_id, final_image_url, caption=f"تم تعديل الصورة بنجاح.", reply_to_message_id=message_id)
     else:
-        tg.send_message(chat_id, "فشل تعديل الصورة أو استغرق وقتاً طويلاً. يرجى المحاولة مرة أخرى.", reply_to_message_id=message_id)
+        tg.send_message(chat_id, "فشل تعديل الصورة. يرجى المحاولة مرة أخرى أو التأكد من صلاحية التوكن.", reply_to_message_id=message_id)
+    tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
 
 def describe_image_worker(chat_id, message_id, file_id, waiting_message_id):
     tg.send_chat_action(chat_id, "typing")
@@ -123,15 +125,17 @@ def describe_image_worker(chat_id, message_id, file_id, waiting_message_id):
     description, _ = services.describe_image_with_gemini(image_base64)
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
     tg.send_message(chat_id, f"**وصف الصورة:**\n\n{description}", reply_to_message_id=message_id)
+    tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
 
 def enhance_prompt_worker(chat_id, message_id, simple_prompt, waiting_message_id):
     tg.send_chat_action(chat_id, "typing")
     enhanced_prompt, _ = services.generate_enhanced_prompt(simple_prompt)
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
     tg.send_message(chat_id, f"**الوصف المحسّن (Prompt):**\n\n`{enhanced_prompt}`\n\nيمكنك الآن نسخ هذا الوصف واستخدامه في 'إنشاء صورة'.", reply_to_message_id=message_id)
+    tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
 
 
-def video_generation_worker(chat_id, message_id, prompt, start_job_function, file_id=None):
+def video_generation_worker(chat_id, message_id, prompt, start_job_function, file_id=None, enhanced_prompt=None):
     job_id = str(uuid.uuid4())
     cancel_event = threading.Event()
     ACTIVE_VIDEO_JOBS[job_id] = cancel_event
@@ -140,9 +144,11 @@ def video_generation_worker(chat_id, message_id, prompt, start_job_function, fil
     status_msg = tg.send_message(chat_id, "تم استلام الطلب 🎬\nجاري إنشاء الفيديو... قد تستغرق العملية عدة دقائق.", reply_to_message_id=message_id, reply_markup=keyboard)
     status_message_id = status_msg['result']['message_id']
     
+    final_prompt = enhanced_prompt or prompt
+
     try:
         generation_info = None
-        if file_id: # إذا كان هناك حاجة لصورة
+        if file_id:
             file_path = tg.get_file_path(file_id)
             if not file_path:
                 tg.edit_message_text(chat_id, status_message_id, "خطأ: لم أتمكن من تحميل الصورة من تيليجرام."); return
@@ -156,10 +162,10 @@ def video_generation_worker(chat_id, message_id, prompt, start_job_function, fil
                 tg.edit_message_text(chat_id, status_message_id, "خطأ: فشل رفع الصورة لخدمة الفيديو."); return
             
             tg.send_chat_action(chat_id, "upload_video")
-            generation_info = start_job_function(prompt, upload_info['cdnUrl'], upload_info['uploadId'])
-        else: # إذا كان من نص فقط
+            generation_info = start_job_function(final_prompt, upload_info['cdnUrl'], upload_info['uploadId'])
+        else:
             tg.send_chat_action(chat_id, "upload_video")
-            generation_info = start_job_function(prompt)
+            generation_info = start_job_function(final_prompt)
 
         if not generation_info:
             tg.edit_message_text(chat_id, status_message_id, "خطأ: فشل بدء مهمة إنشاء الفيديو.")
@@ -173,11 +179,18 @@ def video_generation_worker(chat_id, message_id, prompt, start_job_function, fil
             tg.edit_message_text(chat_id, status_message_id, "اكتمل إنشاء الفيديو! جاري الإرسال...")
             tg.send_video(chat_id, video_url, caption=f"فيديو من: {start_job_function.__name__}", reply_to_message_id=message_id)
             tg.delete_message(chat_id, status_message_id)
+            if enhanced_prompt:
+                tg.send_message(chat_id, f"**تم استخدام الوصف المحسّن التالي:**\n\n`{enhanced_prompt}`", reply_to_message_id=message_id)
         else:
             tg.edit_message_text(chat_id, status_message_id, "فشلت عملية إنشاء الفيديو أو استغرقت وقتاً طويلاً.")
     finally:
         if job_id in ACTIVE_VIDEO_JOBS:
             del ACTIVE_VIDEO_JOBS[job_id]
+        if not video_url or video_url == "CANCELLED":
+             tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
+        else:
+             time.sleep(1)
+             tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
 
 
 # --- المنطق الرئيسي للبوت ---
@@ -200,25 +213,16 @@ def process_update(update, chat_sessions):
             USER_STATES[chat_id] = {'state': 'awaiting_prompt', 'type': 'prompt_enhance'}
             tg.send_message(chat_id, "يرجى إرسال فكرة بسيطة، وسأقوم بتحويلها إلى وصف احترافي.")
         elif data == 'describe_image':
-            USER_STATES[chat_id] = {'state': 'awaiting_image'}
+            USER_STATES[chat_id] = {'state': 'awaiting_image', 'type': 'describe'}
             tg.send_message(chat_id, "يرجى إرسال الصورة التي تريد وصفها.")
-        elif data == 'edit_last_image':
-            if session.get('last_image_file_id'):
-                USER_STATES[chat_id] = {'state': 'awaiting_prompt', 'type': 'image_edit'}
-                tg.send_message(chat_id, "يرجى إرسال تعليمات التعديل على آخر صورة.")
-            else:
-                tg.send_message(chat_id, "لم يتم العثور على صورة سابقة.")
-        elif data.startswith("edit_image:"):
-            file_id = data.split(":", 1)[1]
-            session['last_image_file_id'] = file_id
-            USER_STATES[chat_id] = {'state': 'awaiting_prompt', 'type': 'image_edit'}
-            tg.send_message(chat_id, "يرجى إرسال تعليمات التعديل لهذه الصورة.")
+        elif data == 'edit_image_start':
+            USER_STATES[chat_id] = {'state': 'awaiting_image', 'type': 'edit'}
+            tg.send_message(chat_id, "يرجى إرسال الصورة التي تريد تعديلها.")
         elif data == 'create_video':
             tg.edit_message_text(chat_id, message_id, "اختر موديل الفيديو:", reply_markup=VIDEO_MODEL_SELECTION_KEYBOARD)
         elif data.startswith("select_model:"):
             model = data.split(":", 1)[1]
             USER_STATES[chat_id] = {'state': 'awaiting_type_selection', 'model': model}
-            # --- [مُعدل] إضافة sora_pro هنا ---
             if model in ['veo', 'sora', 'sora_pro']:
                 tg.edit_message_text(chat_id, message_id, f"اختر نوع الإدخال لموديل {model.upper()}:", reply_markup=VEO_SORA_OPTIONS_KEYBOARD)
             elif model == 'kling':
@@ -235,6 +239,51 @@ def process_update(update, chat_sessions):
                 else: # from_text
                     USER_STATES[chat_id] = {'state': 'awaiting_prompt', 'type': f'{model}_from_text'}
                     tg.edit_message_text(chat_id, message_id, f"أرسل الوصف لإنشاء فيديو من نص باستخدام موديل {model.upper()}.")
+        
+        elif data == 'confirm_enhance_video_prompt':
+            user_context = USER_STATES.get(chat_id)
+            if user_context and user_context.get('state') == 'awaiting_video_prompt_enhance_confirmation':
+                tg.edit_message_text(chat_id, message_id, "جاري تحسين الوصف...")
+                original_prompt = user_context['original_prompt']
+                enhanced_prompt, _ = services.generate_enhanced_prompt(original_prompt)
+                
+                USER_STATES.pop(chat_id, None)
+                tg.delete_message(chat_id, message_id)
+
+                job_map = {
+                    'veo_from_text': (services.start_veo_text_to_video_job, None),
+                    'sora_from_text': (services.start_sora_text_to_video_job, None),
+                    'sora_pro_from_text': (services.start_sora_pro_text_to_video_job, None),
+                    'veo_from_image': (services.start_veo_image_to_video_job, user_context.get('file_id')),
+                    'sora_from_image': (services.start_sora_image_to_video_job, user_context.get('file_id')),
+                    'sora_pro_from_image': (services.start_sora_pro_image_to_video_job, user_context.get('file_id')),
+                    'kling_from_image': (services.start_kling_image_to_video_job, user_context.get('file_id')),
+                }
+                gen_type = f"{user_context['model']}_{user_context['gen_type']}"
+                start_job_function, file_id = job_map.get(gen_type, (None, None))
+                
+                if start_job_function:
+                    threading.Thread(target=video_generation_worker, args=(chat_id, user_context['original_message_id'], original_prompt, start_job_function, file_id, enhanced_prompt)).start()
+
+        elif data == 'skip_enhance_video_prompt':
+            user_context = USER_STATES.get(chat_id)
+            if user_context and user_context.get('state') == 'awaiting_video_prompt_enhance_confirmation':
+                USER_STATES.pop(chat_id, None)
+                tg.delete_message(chat_id, message_id)
+                job_map = {
+                    'veo_from_text': (services.start_veo_text_to_video_job, None),
+                    'sora_from_text': (services.start_sora_text_to_video_job, None),
+                    'sora_pro_from_text': (services.start_sora_pro_text_to_video_job, None),
+                    'veo_from_image': (services.start_veo_image_to_video_job, user_context.get('file_id')),
+                    'sora_from_image': (services.start_sora_image_to_video_job, user_context.get('file_id')),
+                    'sora_pro_from_image': (services.start_sora_pro_image_to_video_job, user_context.get('file_id')),
+                    'kling_from_image': (services.start_kling_image_to_video_job, user_context.get('file_id')),
+                }
+                gen_type = f"{user_context['model']}_{user_context['gen_type']}"
+                start_job_function, file_id = job_map.get(gen_type, (None, None))
+
+                if start_job_function:
+                    threading.Thread(target=video_generation_worker, args=(chat_id, user_context['original_message_id'], user_context['original_prompt'], start_job_function, file_id)).start()
 
         elif data == 'back_to_model_select':
             USER_STATES.pop(chat_id, None)
@@ -289,55 +338,65 @@ def process_update(update, chat_sessions):
     elif state == 'awaiting_video_prompt':
         model = user_context.get('model')
         file_id = user_context.get('file_id')
-        gen_type = f"{model}_from_image"
-        USER_STATES.pop(chat_id, None)
-        # --- [مُعدل] إضافة sora_pro هنا ---
-        job_map = {
-            'veo_from_image': services.start_veo_image_to_video_job,
-            'sora_from_image': services.start_sora_image_to_video_job,
-            'sora_pro_from_image': services.start_sora_pro_image_to_video_job,
-            'kling_from_image': services.start_kling_image_to_video_job,
+        USER_STATES[chat_id] = {
+            'state': 'awaiting_video_prompt_enhance_confirmation',
+            'model': model,
+            'file_id': file_id,
+            'original_prompt': prompt,
+            'original_message_id': message_id,
+            'gen_type': 'from_image'
         }
-        start_job_function = job_map.get(gen_type)
-        if start_job_function:
-             threading.Thread(target=video_generation_worker, args=(chat_id, message_id, prompt, start_job_function, file_id)).start()
+        tg.send_message(chat_id, "هل تريد تحسين الوصف باستخدام الذكاء الاصطناعي؟", reply_markup=PROMPT_ENHANCE_CONFIRMATION_KEYBOARD, reply_to_message_id=message_id)
         return
 
     elif state == 'awaiting_image':
-        USER_STATES.pop(chat_id, None)
         if 'photo' in message:
             file_id = message['photo'][-1]['file_id']
-            session['last_image_file_id'] = file_id
-            sent_msg = tg.send_message(chat_id, "جاري تحليل ووصف الصورة...", reply_to_message_id=message_id)
-            waiting_message_id = sent_msg.get('result', {}).get('message_id')
-            threading.Thread(target=describe_image_worker, args=(chat_id, message_id, file_id, waiting_message_id)).start()
+            image_type = user_context.get('type')
+            
+            if image_type == 'describe':
+                USER_STATES.pop(chat_id, None)
+                session['last_image_file_id'] = file_id
+                sent_msg = tg.send_message(chat_id, "جاري تحليل ووصف الصورة...", reply_to_message_id=message_id)
+                waiting_message_id = sent_msg.get('result', {}).get('message_id')
+                threading.Thread(target=describe_image_worker, args=(chat_id, message_id, file_id, waiting_message_id)).start()
+            elif image_type == 'edit':
+                USER_STATES[chat_id] = {'state': 'awaiting_prompt', 'type': 'image_edit', 'file_id': file_id}
+                tg.send_message(chat_id, "تم استلام الصورة. يرجى الآن إرسال تعليمات التعديل.", reply_to_message_id=message_id)
         else:
             tg.send_message(chat_id, "لم يتم إرسال صورة. يرجى المحاولة مرة أخرى.", reply_to_message_id=message_id)
+        return
 
     elif state == 'awaiting_prompt':
         gen_type = user_context.get('type')
-        USER_STATES.pop(chat_id, None)
         
         if gen_type == 'image_gen':
+            USER_STATES.pop(chat_id, None)
             sent_msg = tg.send_message(chat_id, "جاري إنشاء الصورة...", reply_to_message_id=message_id)
             waiting_message_id = sent_msg.get('result', {}).get('message_id')
             threading.Thread(target=image_generation_worker, args=(chat_id, message_id, prompt, session, waiting_message_id)).start()
         
         elif gen_type == 'image_edit':
-            image_to_process_id = session.get('last_image_file_id')
+            image_to_edit_id = user_context.get('file_id')
+            USER_STATES.pop(chat_id, None)
             sent_msg = tg.send_message(chat_id, "جاري تعديل الصورة...", reply_to_message_id=message_id)
             waiting_message_id = sent_msg.get('result', {}).get('message_id')
-            threading.Thread(target=edit_image_worker, args=(chat_id, message_id, image_to_process_id, prompt, session, waiting_message_id)).start()
+            threading.Thread(target=edit_image_worker, args=(chat_id, message_id, image_to_edit_id, prompt, waiting_message_id)).start()
         
         elif gen_type == 'prompt_enhance':
+            USER_STATES.pop(chat_id, None)
             sent_msg = tg.send_message(chat_id, "جاري تحليل الفكرة وتحسينها...", reply_to_message_id=message_id)
             waiting_message_id = sent_msg.get('result', {}).get('message_id')
             threading.Thread(target=enhance_prompt_worker, args=(chat_id, message_id, prompt, waiting_message_id)).start()
         
-        # --- [مُعدل] إضافة sora_pro هنا ---
-        elif gen_type == 'veo_from_text':
-            threading.Thread(target=video_generation_worker, args=(chat_id, message_id, prompt, services.start_veo_text_to_video_job)).start()
-        elif gen_type == 'sora_from_text':
-            threading.Thread(target=video_generation_worker, args=(chat_id, message_id, prompt, services.start_sora_text_to_video_job)).start()
-        elif gen_type == 'sora_pro_from_text':
-            threading.Thread(target=video_generation_worker, args=(chat_id, message_id, prompt, services.start_sora_pro_text_to_video_job)).start()
+        elif gen_type in ['veo_from_text', 'sora_from_text', 'sora_pro_from_text']:
+            model = gen_type.split('_')[0]
+            USER_STATES[chat_id] = {
+                'state': 'awaiting_video_prompt_enhance_confirmation',
+                'model': model if 'pro' not in gen_type else 'sora_pro',
+                'file_id': None,
+                'original_prompt': prompt,
+                'original_message_id': message_id,
+                'gen_type': 'from_text'
+            }
+            tg.send_message(chat_id, "هل تريد تحسين الوصف باستخدام الذكاء الاصطناعي؟", reply_markup=PROMPT_ENHANCE_CONFIRMATION_KEYBOARD, reply_to_message_id=message_id)
