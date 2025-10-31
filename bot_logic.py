@@ -22,16 +22,21 @@ MAIN_KEYBOARD = {
     ]
 }
 
+# --- [مُعدل] لوحة مفاتيح اختيار الفيديو ---
 VIDEO_MODEL_SELECTION_KEYBOARD = {
     "inline_keyboard": [
         [
             {"text": "VEO", "callback_data": "select_model:veo"},
-            {"text": "Sora", "callback_data": "select_model:sora"},
             {"text": "Kling", "callback_data": "select_model:kling"}
+        ],
+        [
+            {"text": "Sora", "callback_data": "select_model:sora"},
+            {"text": "Sora Pro ✨", "callback_data": "select_model:sora_pro"}
         ],
         [{"text": "⬅️ عودة للقائمة الرئيسية", "callback_data": "back_to_main"}]
     ]
 }
+
 
 VEO_SORA_OPTIONS_KEYBOARD = {
     "inline_keyboard": [
@@ -72,17 +77,27 @@ def edit_image_worker(chat_id, message_id, image_file_id, edit_prompt, session, 
     if not file_path:
         if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
         tg.send_message(chat_id, "خطأ: لم أتمكن من تحميل الصورة من تيليجرام.", reply_to_message_id=message_id); return
-    original_image_data = tg.SESSION.get(f"https://api.telegram.org/file/bot{tg.BOT_TOKEN}/{file_path}").content
-    uploaded_url = services.upload_image_for_editing(original_image_data)
+    
+    # تحميل الصورة كبايتات مباشرة
+    original_image_data = tg.download_image_as_bytes(file_path)
+    if not original_image_data:
+        if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
+        tg.send_message(chat_id, "خطأ: فشل تحميل بيانات الصورة.", reply_to_message_id=message_id); return
+        
+    # استدعاء الدوال الجديدة بالترتيب
+    uploaded_url = services.upload_image_for_editing(original_image_data, file_name=f"{uuid.uuid4()}.jpg")
     if not uploaded_url:
         if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
         tg.send_message(chat_id, "خطأ: فشل رفع الصورة لخدمة التعديل.", reply_to_message_id=message_id); return
+
     job_id = services.start_image_editing_job(uploaded_url, edit_prompt)
     if not job_id:
         if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
         tg.send_message(chat_id, "خطأ: فشل بدء مهمة تعديل الصورة.", reply_to_message_id=message_id); return
+
     final_image_url = services.poll_for_editing_result(job_id)
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
+    
     if final_image_url:
         photo_message = tg.send_photo(chat_id, final_image_url, caption=f"تم تعديل الصورة بنجاح.", reply_to_message_id=message_id)
         if photo_message and photo_message.get('ok'):
@@ -93,7 +108,7 @@ def edit_image_worker(chat_id, message_id, image_file_id, edit_prompt, session, 
             tg.edit_message_reply_markup(chat_id, sent_message_id, keyboard)
             session['last_image_file_id'] = photo_file_id
     else:
-        tg.send_message(chat_id, "فشل تعديل الصورة. يرجى المحاولة مرة أخرى.", reply_to_message_id=message_id)
+        tg.send_message(chat_id, "فشل تعديل الصورة أو استغرق وقتاً طويلاً. يرجى المحاولة مرة أخرى.", reply_to_message_id=message_id)
 
 def describe_image_worker(chat_id, message_id, file_id, waiting_message_id):
     tg.send_chat_action(chat_id, "typing")
@@ -203,7 +218,8 @@ def process_update(update, chat_sessions):
         elif data.startswith("select_model:"):
             model = data.split(":", 1)[1]
             USER_STATES[chat_id] = {'state': 'awaiting_type_selection', 'model': model}
-            if model in ['veo', 'sora']:
+            # --- [مُعدل] إضافة sora_pro هنا ---
+            if model in ['veo', 'sora', 'sora_pro']:
                 tg.edit_message_text(chat_id, message_id, f"اختر نوع الإدخال لموديل {model.upper()}:", reply_markup=VEO_SORA_OPTIONS_KEYBOARD)
             elif model == 'kling':
                 tg.edit_message_text(chat_id, message_id, "موديل Kling يدعم الإنشاء من صورة ونص فقط.", reply_markup=KLING_OPTIONS_KEYBOARD)
@@ -214,8 +230,6 @@ def process_update(update, chat_sessions):
             if model_info and model_info.get('state') == 'awaiting_type_selection':
                 model = model_info['model']
                 if gen_type == 'from_image':
-                    # --- [التغيير الرئيسي هنا] ---
-                    # بدلاً من التحقق من صورة سابقة، ننتقل إلى حالة انتظار الصورة
                     USER_STATES[chat_id] = {'state': 'awaiting_video_image', 'model': model}
                     tg.edit_message_text(chat_id, message_id, f"تمام. يرجى الآن إرسال الصورة التي تريد تحريكها باستخدام موديل {model.upper()}.")
                 else: # from_text
@@ -262,28 +276,26 @@ def process_update(update, chat_sessions):
 
     state = user_context.get('state')
     
-    # --- [حالة جديدة] التعامل مع استقبال الصورة للفيديو ---
     if state == 'awaiting_video_image':
         if 'photo' in message:
             file_id = message['photo'][-1]['file_id']
             model = user_context.get('model')
-            # ننتقل الآن إلى حالة انتظار الوصف النصي، مع تخزين معرف الصورة والموديل
             USER_STATES[chat_id] = {'state': 'awaiting_video_prompt', 'model': model, 'file_id': file_id}
             tg.send_message(chat_id, "صورة ممتازة. الآن يرجى إرسال الوصف النصي للحركة التي تريد إضافتها.", reply_to_message_id=message_id)
         else:
             tg.send_message(chat_id, "الرجاء إرسال صورة.", reply_to_message_id=message_id)
         return
 
-    # --- [حالة جديدة] التعامل مع استقبال الوصف النصي بعد الصورة ---
     elif state == 'awaiting_video_prompt':
         model = user_context.get('model')
         file_id = user_context.get('file_id')
         gen_type = f"{model}_from_image"
         USER_STATES.pop(chat_id, None)
-        # الآن نبدأ عامل الفيديو بالمعلومات الكاملة
+        # --- [مُعدل] إضافة sora_pro هنا ---
         job_map = {
             'veo_from_image': services.start_veo_image_to_video_job,
             'sora_from_image': services.start_sora_image_to_video_job,
+            'sora_pro_from_image': services.start_sora_pro_image_to_video_job,
             'kling_from_image': services.start_kling_image_to_video_job,
         }
         start_job_function = job_map.get(gen_type)
@@ -322,7 +334,10 @@ def process_update(update, chat_sessions):
             waiting_message_id = sent_msg.get('result', {}).get('message_id')
             threading.Thread(target=enhance_prompt_worker, args=(chat_id, message_id, prompt, waiting_message_id)).start()
         
+        # --- [مُعدل] إضافة sora_pro هنا ---
         elif gen_type == 'veo_from_text':
             threading.Thread(target=video_generation_worker, args=(chat_id, message_id, prompt, services.start_veo_text_to_video_job)).start()
         elif gen_type == 'sora_from_text':
             threading.Thread(target=video_generation_worker, args=(chat_id, message_id, prompt, services.start_sora_text_to_video_job)).start()
+        elif gen_type == 'sora_pro_from_text':
+            threading.Thread(target=video_generation_worker, args=(chat_id, message_id, prompt, services.start_sora_pro_text_to_video_job)).start()
