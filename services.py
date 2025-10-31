@@ -19,6 +19,12 @@ SESSION = requests.Session()
 PROMPT_ENHANCER_INSTRUCTION = {
     "parts": [{"text": "You are a professional prompt engineer for an AI image and video generator. Your task is to take a user's simple idea and expand it into a detailed, rich, and effective prompt in English. The prompt should include details about the subject, setting, lighting, artistic style, composition, and technical specifications like '8K, photorealistic, sharp focus'. Your output should ONLY be the final English prompt, with no additional text or explanation."}]
 }
+
+# --- [جديد] تعليمات لتحسين الوصف مع وجود صورة ---
+PROMPT_ENHANCER_WITH_IMAGE_INSTRUCTION = {
+    "parts": [{"text": "You are a professional prompt engineer for an AI video generator. Your task is to analyze the provided image and the user's simple text idea. Based on both, create a detailed, rich, and effective prompt in English that describes a video scene. The prompt should animate the contents of the image according to the user's idea, describing motion, camera movement, atmosphere, and style. For example, if the user says 'make it rain', you describe 'cinematic shot, heavy rain starts to fall, drops hitting the surfaces, reflections on wet ground...'. Your output should ONLY be the final English prompt, with no additional text or explanation."}]
+}
+
 IMAGE_DESCRIBER_INSTRUCTION = {
     "parts": [{"text": "You are an expert art analyst. Your task is to describe the provided image in comprehensive detail. Cover the main subject, background, setting, color palette, lighting, composition, mood, and potential artistic style. Your description should be clear, objective, and informative. Respond in Arabic."}]
 }
@@ -57,6 +63,10 @@ def generate_gemini_response(chat_history, prompt_text, image_base64=None, syste
 def generate_enhanced_prompt(simple_prompt):
     return generate_gemini_response([], simple_prompt, system_instruction=PROMPT_ENHANCER_INSTRUCTION)
 
+# --- [جديد] دالة لتحسين الوصف مع الصورة ---
+def generate_enhanced_prompt_with_image(simple_prompt, image_base64):
+    return generate_gemini_response([], simple_prompt, image_base64=image_base64, system_instruction=PROMPT_ENHANCER_WITH_IMAGE_INSTRUCTION)
+
 def describe_image_with_gemini(image_base64):
     return generate_gemini_response([], "", image_base64=image_base64, system_instruction=IMAGE_DESCRIBER_INSTRUCTION)
 
@@ -81,7 +91,7 @@ def generate_image_from_prompt(prompt):
         print("Job timed out."); return []
     except requests.exceptions.RequestException as e: print(f"An error occurred during API call: {e}"); return []
 
-# --- [جديد] خدمات تعديل الصور (Digen API) ---
+# --- خدمات تعديل الصور (Digen API) ---
 def _digen_upload_photo(image_path: str) -> str or None:
     """الخطوة 1: رفع الصورة للحصول على رابط مرجعي."""
     print(f"Digen: Starting image upload: {image_path}")
@@ -248,8 +258,14 @@ def start_sora_pro_image_to_video_job(prompt, image_url, media_id):
     return _start_video_job("https://www.basedlabs.ai/api/generate/video", payload)
 
 def start_kling_image_to_video_job(prompt, image_url, media_id):
-    print("Starting KLING IMAGE-TO-VIDEO generation...")
+    print("Starting KLING (Turbo) IMAGE-TO-VIDEO generation...")
     payload = {"prompt": prompt,"image_url": image_url,  "model": { "id": 118, "label": "Kling", "purpose": "Video", "type": "Checkpoint", "description": "Kling model for video generation", "baseModel": "Kling", "versionInfo": { "id": 167, "index": None, "name": "2.5 Turbo", "description": None, "modelId": 118, "trainedWords": [], "steps": None, "epochs": None, "clipSkip": None, "vaeId": None, "createdAt": "2025-09-23T21:57:59.791Z", "updatedAt": "2025-09-23T21:58:40.950Z", "publishedAt": None, "status": "Published", "trainingStatus": None, "trainingDetails": None, "inaccurate": False, "baseModel": "Kling", "baseModelType": None, "meta": {}, "earlyAccessTimeFrame": 0, "requireAuth": False, "settings": None, "availability": "Public", "creditCost": 50, "creditCostConfig": { "5": 50, "10": 100 }, "isActive": True, "modelPath": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video", "baseModelSetType": None, "type": "ImageToVideo", "uploadType": "Created", "isDefault": False, "autoUpscale": False, "files": [] }, "checkpoint": "" }, "width": 447, "height": 447, "duration": 10, "mediaId": "cmh8pnlhu06ne0rfh6sw7zyd9", "sourceMedia": image_url, "motion_bucket_id": 60, "generate_audio": True, "resolution": "720p", "aspect_ratio": "auto" }
+    return _start_video_job("https://www.basedlabs.ai/api/generate/video", payload)
+
+# --- [جديد] دالة لموديل Kling Standard ---
+def start_kling_standard_image_to_video_job(prompt, image_url, media_id):
+    print("Starting KLING (Standard) IMAGE-TO-VIDEO generation...")
+    payload = { "prompt": prompt, "image_url": image_url, "model": { "id": 118, "label": "Kling", "purpose": "Video", "type": "Checkpoint", "description": "Kling model for video generation", "baseModel": "Kling", "versionInfo": { "id": 129, "index": None, "name": "2.1 Standard", "description": None, "modelId": 118, "trainedWords": [], "steps": None, "epochs": None, "clipSkip": None, "vaeId": None, "createdAt": "2025-06-19T01:47:31.721Z", "updatedAt": "2025-07-14T03:25:11.370Z", "publishedAt": None, "status": "Published", "trainingStatus": None, "trainingDetails": None, "inaccurate": False, "baseModel": "Kling", "baseModelType": None, "meta": {}, "earlyAccessTimeFrame": 0, "requireAuth": False, "settings": None, "availability": "Public", "creditCost": 50, "creditCostConfig": { "5": 50, "10": 100 }, "isActive": True, "modelPath": "fal-ai/kling-video/v2.1/standard/image-to-video", "baseModelSetType": None, "type": "ImageToVideo", "uploadType": "Created", "isDefault": False, "autoUpscale": False, "files": [] }, "checkpoint": "" }, "width": 1024, "height": 1024, "duration": 10, "mediaId": "cmhesrtdu05ia03cr84b439l6", "sourceMedia": image_url, "motion_bucket_id": 60, "generate_audio": True, "resolution": "720p", "aspect_ratio": "auto" }
     return _start_video_job("https://www.basedlabs.ai/api/generate/video", payload)
 
 def poll_for_video_result(request_id, history_id, cancel_event):
