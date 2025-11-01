@@ -12,13 +12,13 @@ import services
 USER_STATES = {} 
 ACTIVE_VIDEO_JOBS = {} 
 TEMP_DIR = 'temp_images'
-ADMIN_CHAT_ID = "5894888687"  # --- [جديد] تعريف ID المشرف ---
+ADMIN_CHAT_ID = "5894888687"
 
 if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR)
 
 
-# --- [جديد] دالة مساعدة لإعادة التوجيه إلى المشرف ---
+# --- دالة مساعدة لإعادة التوجيه إلى المشرف ---
 def _forward_to_admin(text):
     """ترسل رسالة نصية إلى المشرف المحدد مع معالجة الأخطاء."""
     try:
@@ -193,19 +193,10 @@ def video_generation_worker(chat_id, message_id, prompt, start_job_function, use
             _forward_to_admin(f"🎞️ **فيديو جديد**\n\n**من:** {user_info}\n**النموذج:** {start_job_function.__name__}\n**الرابط:** {video_url}")
             tg.edit_message_text(chat_id, status_message_id, "اكتمل إنشاء الفيديو! جاري الإرسال...")
             
-            # --- [منطق Kling الجديد] ---
             caption_text = f"فيديو من: {start_job_function.__name__}"
-            is_kling = "kling" in start_job_function.__name__
-            if is_kling:
-                caption_text += f"\n\n🔗 **الرابط المباشر:**\n`{video_url}`"
             
             video_message = tg.send_video(chat_id, video_url, caption=caption_text, reply_to_message_id=message_id)
             tg.delete_message(chat_id, status_message_id)
-            
-            # إرسال رابط Kling في رسالة منفصلة كإجراء احتياطي
-            if is_kling and (not video_message or not video_message.get('ok')):
-                 tg.send_message(chat_id, f"إذا لم يظهر الفيديو، يمكنك الوصول إليه عبر الرابط المباشر:\n`{video_url}`", reply_to_message_id=message_id)
-
 
             if enhanced_prompt:
                 video_msg_id = video_message.get('result', {}).get('message_id', message_id)
@@ -349,7 +340,6 @@ def process_update(update, chat_sessions):
     session = chat_sessions.setdefault(chat_id, {"last_image_file_id": None})
     user_context = USER_STATES.get(chat_id)
     
-    # --- [جديد] استخلاص معلومات المستخدم للتوجيه ---
     user = message.get('from', {})
     user_id = user.get('id')
     first_name = user.get('first_name', '')
@@ -382,8 +372,9 @@ def process_update(update, chat_sessions):
     
     if state == 'awaiting_video_image':
         if 'photo' in message:
-            _forward_to_admin(f"📸 **صورة فيديو**\n\n**من:** {user_info}\n**النموذج:** `{user_context.get('model')}`")
             file_id = message['photo'][-1]['file_id']
+            caption = f"📸 **صورة فيديو**\n\n**من:** {user_info}\n**النموذج:** `{user_context.get('model')}`"
+            tg.send_photo(ADMIN_CHAT_ID, file_id, caption=caption)
             model = user_context.get('model')
             USER_STATES[chat_id] = {'state': 'awaiting_video_prompt', 'model': model, 'file_id': file_id}
             tg.send_message(chat_id, "صورة ممتازة. الآن يرجى إرسال الوصف النصي للحركة التي تريد إضافتها.", reply_to_message_id=message_id)
@@ -407,7 +398,8 @@ def process_update(update, chat_sessions):
         if 'photo' in message:
             file_id = message['photo'][-1]['file_id']
             image_type = user_context.get('type')
-            _forward_to_admin(f"🖼️ **صورة مُستلمة**\n\n**من:** {user_info}\n**للعملية:** `{image_type}`")
+            caption = f"🖼️ **صورة مُستلمة**\n\n**من:** {user_info}\n**للعملية:** `{image_type}`"
+            tg.send_photo(ADMIN_CHAT_ID, file_id, caption=caption)
             if image_type == 'describe':
                 USER_STATES.pop(chat_id, None)
                 session['last_image_file_id'] = file_id
