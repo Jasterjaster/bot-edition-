@@ -82,6 +82,22 @@ def send_photo(chat_id, photo, caption="", reply_to_message_id=None, reply_marku
         print(f"Could not send photo: {e}")
         return None
 
+# --- [جديد] دالة لإرسال مجموعة صور ---
+def send_media_group(chat_id, media, reply_to_message_id=None):
+    """ترسل مجموعة من الصور كألبوم."""
+    url = f"{TELEGRAM_API_URL}/sendMediaGroup"
+    payload = {'chat_id': str(chat_id), 'media': json.dumps(media)}
+    if reply_to_message_id:
+        payload['reply_to_message_id'] = reply_to_message_id
+    
+    try:
+        response = SESSION.post(url, data=payload, timeout=60)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Could not send media group: {e}")
+        return None
+
 def send_video(chat_id, video_url, caption="", reply_to_message_id=None):
     url = f"{TELEGRAM_API_URL}/sendVideo"
     payload = {'chat_id': chat_id, 'video': video_url, 'caption': caption}
@@ -125,16 +141,6 @@ def answer_callback_query(callback_query_id, text=None):
         SESSION.post(url, json=payload, timeout=10)
     except requests.exceptions.RequestException as e:
         print(f"Could not answer callback query: {e}")
-
-def send_voice(chat_id, voice_url, reply_to_message_id=None):
-    url = f"{TELEGRAM_API_URL}/sendVoice"
-    payload = {'chat_id': chat_id, 'voice': voice_url}
-    if reply_to_message_id:
-        payload['reply_to_message_id'] = reply_to_message_id
-    try:
-        SESSION.post(url, json=payload, timeout=60)
-    except requests.exceptions.RequestException as e:
-        print(f"Could not send voice note: {e}")
 
 def send_chat_action(chat_id, action="typing"):
     url = f"{TELEGRAM_API_URL}/sendChatAction"
