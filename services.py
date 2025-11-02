@@ -59,7 +59,7 @@ Dialogue: [Spoken dialogue (if any), specifying tone and delivery. Use a colon (
 
 Sounds: [Precise specification of all sounds: ambient noise, sound effects (SFX), music, natural sounds, background hum]
 
-Technical (Negative Prompt): [Elements to strictly avoid: subtitles, captions, watermarks, on-screen text, low quality, artifacts, unnatural motion, distorted hands]'. Your output should ONLY be the final English prompt, with no additional text or explanation.'''}]
+Technical (Negative Prompt): [Elements to strictly avoid: subtitles, captions, watermarks, on-screen text, low quality, artifacts, unnatural motion, distorted hands]'. Your output should ONLY be the final English prompt, with no additional text or explanation. IMPORTANT RULE: keep your response short, don't make it long'''}]
 }
 
 IMAGE_DESCRIBER_INSTRUCTION = {
