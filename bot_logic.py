@@ -28,47 +28,10 @@ def _forward_to_admin(text):
 
 
 # --- لوحات المفاتيح (Keyboards) ---
-MAIN_KEYBOARD = {
-    "inline_keyboard": [
-        [{"text": "🖼️ إنشاء صورة", "callback_data": "generate_image"}, {"text": "✨ تحسين الوصف (Prompt)", "callback_data": "enhance_prompt"}],
-        [{"text": "📄 وصف صورة", "callback_data": "describe_image"}, {"text": "🎨 تعديل صورة", "callback_data": "edit_image_start"}],
-        [{"text": "🎞️ إنشاء فيديو", "callback_data": "create_video"}]
-    ]
-}
-
-IMAGE_COUNT_SELECTION_KEYBOARD = {
-    "inline_keyboard": [
-        [
-            {"text": "🖼️ صورتان", "callback_data": "select_img_count:2"},
-            {"text": "🖼️🖼️ 4 صور", "callback_data": "select_img_count:4"}
-        ]
-    ]
-}
-
-PROMPT_ENHANCE_CONFIRMATION_KEYBOARD_EDIT = {
-    "inline_keyboard": [
-        [
-            {"text": "✅ نعم، قم بالتحسين", "callback_data": "confirm_enhance_edit_prompt"},
-            {"text": "❌ لا، ابدأ بالوصف الحالي", "callback_data": "skip_enhance_edit_prompt"}
-        ]
-    ]
-}
-
-VIDEO_MODEL_SELECTION_KEYBOARD = {
-    "inline_keyboard": [
-        [
-            {"text": "VEO", "callback_data": "select_model:veo"},
-            {"text": "Sora", "callback_data": "select_model:sora"},
-            {"text": "Sora Pro", "callback_data": "select_model:sora_pro"}
-        ],
-        [
-            {"text": "Kling (Turbo)", "callback_data": "select_model:kling"},
-            {"text": "Kling (Standard)", "callback_data": "select_model:kling_standard"}
-        ],
-        [{"text": "⬅️ عودة للقائمة الرئيسية", "callback_data": "back_to_main"}]
-    ]
-}
-
+MAIN_KEYBOARD = { "inline_keyboard": [ [{"text": "🖼️ إنشاء صورة", "callback_data": "generate_image"}, {"text": "✨ تحسين الوصف (Prompt)", "callback_data": "enhance_prompt"}], [{"text": "📄 وصف صورة", "callback_data": "describe_image"}, {"text": "🎨 تعديل صورة", "callback_data": "edit_image_start"}], [{"text": "🎞️ إنشاء فيديو", "callback_data": "create_video"}] ] }
+IMAGE_COUNT_SELECTION_KEYBOARD = { "inline_keyboard": [ [{"text": "🖼️ صورتان", "callback_data": "select_img_count:2"}, {"text": "🖼️🖼️ 4 صور", "callback_data": "select_img_count:4"}] ] }
+PROMPT_ENHANCE_CONFIRMATION_KEYBOARD_EDIT = { "inline_keyboard": [ [{"text": "✅ نعم، قم بالتحسين", "callback_data": "confirm_enhance_edit_prompt"}, {"text": "❌ لا، ابدأ بالوصف الحالي", "callback_data": "skip_enhance_edit_prompt"}] ] }
+VIDEO_MODEL_SELECTION_KEYBOARD = { "inline_keyboard": [ [{"text": "VEO", "callback_data": "select_model:veo"}, {"text": "Sora", "callback_data": "select_model:sora"}, {"text": "Sora Pro", "callback_data": "select_model:sora_pro"}], [{"text": "Kling (Turbo)", "callback_data": "select_model:kling"}, {"text": "Kling (Standard)", "callback_data": "select_model:kling_standard"}], [{"text": "⬅️ عودة للقائمة الرئيسية", "callback_data": "back_to_main"}] ] }
 VEO_SORA_OPTIONS_KEYBOARD = { "inline_keyboard": [ [{"text": "🎬 من نص فقط", "callback_data": "type_select:from_text"}, {"text": "🖼️ من صورة ونص", "callback_data": "type_select:from_image"}], [{"text": "⬅️ عودة لاختيار الموديل", "callback_data": "back_to_model_select"}] ]}
 KLING_OPTIONS_KEYBOARD = { "inline_keyboard": [ [{"text": "🖼️ من صورة ونص", "callback_data": "type_select:from_image"}], [{"text": "⬅️ عودة لاختيار الموديل", "callback_data": "back_to_model_select"}] ]}
 PROMPT_ENHANCE_CONFIRMATION_KEYBOARD = { "inline_keyboard": [ [{"text": "✅ نعم، قم بالتحسين", "callback_data": "confirm_enhance_video_prompt"}, {"text": "❌ لا، ابدأ بالوصف الحالي", "callback_data": "skip_enhance_video_prompt"}] ]}
@@ -78,12 +41,22 @@ PROMPT_ENHANCE_CONFIRMATION_KEYBOARD = { "inline_keyboard": [ [{"text": "✅ ن�
 
 def image_generation_worker(chat_id, message_id, image_prompt, session, waiting_message_id, user_info, image_count):
     tg.send_chat_action(chat_id, "upload_photo")
-    image_urls = services.generate_image_from_prompt(image_prompt, image_count)
+    
+    results = []
+    def task(prompt):
+        result_url = services.generate_image_from_prompt(prompt)
+        if result_url:
+            results.append(result_url)
+
+    with ThreadPoolExecutor(max_workers=image_count) as executor:
+        for _ in range(image_count):
+            executor.submit(task, image_prompt)
+
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
     
-    if image_urls:
-        _forward_to_admin(f"✅ **{len(image_urls)} صور جديدة**\n\n**من:** {user_info}\n**النتائج:**\n" + "\n".join(image_urls))
-        tg.send_media_group(chat_id, image_urls, caption=f"تم إنشاء {len(image_urls)} صور بنجاح.", reply_to_message_id=message_id)
+    if results:
+        _forward_to_admin(f"✅ **{len(results)} صور جديدة**\n\n**من:** {user_info}\n**النتائج:**\n" + "\n".join(results))
+        tg.send_media_group(chat_id, results, caption=f"تم إنشاء {len(results)} صور بنجاح.", reply_to_message_id=message_id)
     else:
         _forward_to_admin(f"❌ **فشل إنشاء صورة**\n\n**من:** {user_info}\n**الوصف:** `{image_prompt}`")
         tg.send_message(chat_id, "حدث خطأ أثناء إنشاء الصورة. يرجى المحاولة مرة أخرى.", reply_to_message_id=message_id)
@@ -102,15 +75,9 @@ def edit_image_worker(chat_id, message_id, image_file_id, edit_prompt, waiting_m
         if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
         tg.send_message(chat_id, "خطأ: فشل تحميل بيانات الصورة.", reply_to_message_id=message_id); return
 
-    local_photo_path = os.path.join(TEMP_DIR, f'{chat_id}_{uuid.uuid4()}.jpg')
-    with open(local_photo_path, 'wb') as f:
-        f.write(image_bytes)
-
-    # --- [منطق التعديل المتوازي] ---
     results = []
     def task(prompt):
-        # Create a unique copy of the image for each thread
-        thread_local_path = local_photo_path.replace('.jpg', f'_{threading.get_ident()}.jpg')
+        thread_local_path = os.path.join(TEMP_DIR, f'{chat_id}_{uuid.uuid4()}.jpg')
         with open(thread_local_path, 'wb') as f_copy:
             f_copy.write(image_bytes)
         
@@ -125,9 +92,6 @@ def edit_image_worker(chat_id, message_id, image_file_id, edit_prompt, waiting_m
         for _ in range(image_count):
             executor.submit(task, edit_prompt)
 
-    if os.path.exists(local_photo_path):
-        os.remove(local_photo_path)
-    
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
     
     if results:
@@ -140,7 +104,6 @@ def edit_image_worker(chat_id, message_id, image_file_id, edit_prompt, waiting_m
     tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
 
 def describe_image_worker(chat_id, message_id, file_id, waiting_message_id, user_info):
-    # ... (No changes in this worker)
     tg.send_chat_action(chat_id, "typing")
     file_path = tg.get_file_path(file_id)
     if not file_path:
@@ -157,16 +120,14 @@ def describe_image_worker(chat_id, message_id, file_id, waiting_message_id, user
     tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
 
 def enhance_prompt_worker(chat_id, message_id, simple_prompt, waiting_message_id, user_info):
-    # ... (No changes in this worker)
     tg.send_chat_action(chat_id, "typing")
-    enhanced_prompt, _ = services.generate_enhanced_prompt(simple_prompt)
+    enhanced_prompt, _ = services.generate_enhanced_prompt("image_gen", simple_prompt) # Default to image_gen
     if waiting_message_id: tg.delete_message(chat_id, waiting_message_id)
     _forward_to_admin(f"✨ **تحسين وصف**\n\n**من:** {user_info}\n**الأصلي:** `{simple_prompt}`\n**المحسّن:** `{enhanced_prompt}`")
     tg.send_message(chat_id, f"**الوصف المحسّن (Prompt):**\n\n`{enhanced_prompt}`\n\nيمكنك الآن نسخ هذا الوصف واستخدامه في 'إنشاء صورة'.", reply_to_message_id=message_id)
     tg.send_message(chat_id, "القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
 
 def video_generation_worker(chat_id, message_id, prompt, start_job_function, user_info, file_id=None, enhanced_prompt=None):
-    # ... (No changes in this worker)
     job_id = str(uuid.uuid4())
     cancel_event = threading.Event()
     ACTIVE_VIDEO_JOBS[job_id] = cancel_event
@@ -230,7 +191,6 @@ def process_update(update, chat_sessions):
 
         tg.answer_callback_query(callback_id)
 
-        # --- [منطق جديد] التعامل مع اختيار عدد الصور ---
         if data.startswith("select_img_count:"):
             image_count = int(data.split(":")[1])
             gen_type = user_context.get('type')
@@ -250,17 +210,16 @@ def process_update(update, chat_sessions):
                 threading.Thread(target=edit_image_worker, args=(chat_id, user_context.get('original_message_id'), file_id, final_prompt, waiting_message_id, user_context.get('user_info'), image_count)).start()
             return
             
-        # --- [منطق جديد] التعامل مع تحسين وصف التعديل ---
         if data == 'confirm_enhance_edit_prompt' or data == 'skip_enhance_edit_prompt':
             if user_context.get('state') == 'awaiting_edit_prompt_enhance_confirmation':
                 final_prompt = user_context['original_prompt']
                 if data == 'confirm_enhance_edit_prompt':
                     tg.edit_message_text(chat_id, message_id, "جاري تحسين الوصف...")
                     file_path = tg.get_file_path(user_context['file_id'])
-                    image_base64 = tg.download_image_as_base64(file_path)
+                    image_base64 = tg.download_image_as_base64(file_path) if file_path else None
                     if image_base64:
-                        enhanced_prompt, _ = services.generate_enhanced_prompt_with_image(final_prompt, image_base64)
-                        if enhanced_prompt != "تم حظر الاستجابة.":
+                        enhanced_prompt, _ = services.generate_enhanced_prompt("image_edit", final_prompt, image_base64)
+                        if "حظر" not in enhanced_prompt:
                             final_prompt = enhanced_prompt
                     _forward_to_admin(f"✨ **تحسين وصف تعديل (موافقة)**\n\n**من:** {user_context['user_info']}\n**الأصلي:** `{user_context['original_prompt']}`\n**المحسّن:** `{final_prompt}`")
                     tg.send_message(chat_id, f"**سيتم استخدام الوصف المحسّن التالي:**\n`{final_prompt}`")
@@ -275,7 +234,6 @@ def process_update(update, chat_sessions):
                 tg.edit_message_text(chat_id, message_id, "كم عدد الصور المعدلة التي تريد إنشاءها؟", reply_markup=IMAGE_COUNT_SELECTION_KEYBOARD)
             return
 
-        # --- بقية المنطق ---
         if data == 'generate_image':
             USER_STATES[chat_id] = {'state': 'awaiting_prompt', 'type': 'image_gen'}
             tg.send_message(chat_id, "يرجى إرسال الوصف (prompt) لإنشاء الصورة.")
@@ -288,7 +246,6 @@ def process_update(update, chat_sessions):
         elif data == 'edit_image_start':
             USER_STATES[chat_id] = {'state': 'awaiting_image', 'type': 'edit'}
             tg.send_message(chat_id, "يرجى إرسال الصورة التي تريد تعديلها.")
-        # ... (Video logic remains unchanged)
         elif data == 'create_video':
             tg.edit_message_text(chat_id, message_id, "اختر موديل الفيديو:", reply_markup=VIDEO_MODEL_SELECTION_KEYBOARD)
         elif data.startswith("select_model:"):
@@ -306,7 +263,7 @@ def process_update(update, chat_sessions):
                 if gen_type == 'from_image':
                     USER_STATES[chat_id] = {'state': 'awaiting_video_image', 'model': model}
                     tg.edit_message_text(chat_id, message_id, f"تمام. يرجى الآن إرسال الصورة التي تريد تحريكها باستخدام موديل {model.upper()}.")
-                else: # from_text
+                else:
                     USER_STATES[chat_id] = {'state': 'awaiting_prompt', 'type': f'{model}_from_text'}
                     tg.edit_message_text(chat_id, message_id, f"أرسل الوصف لإنشاء فيديو من نص باستخدام موديل {model.upper()}.")
         elif data == 'confirm_enhance_video_prompt' or data == 'skip_enhance_video_prompt':
@@ -320,9 +277,9 @@ def process_update(update, chat_sessions):
                         file_path = tg.get_file_path(user_context['file_id'])
                         image_base64 = tg.download_image_as_base64(file_path) if file_path else None
                         if image_base64:
-                            enhanced_prompt, _ = services.generate_enhanced_prompt_with_image(original_prompt, image_base64)
+                            enhanced_prompt, _ = services.generate_enhanced_prompt("video_image", original_prompt, image_base64)
                     else:
-                        enhanced_prompt, _ = services.generate_enhanced_prompt(original_prompt)
+                        enhanced_prompt, _ = services.generate_enhanced_prompt("video_text", original_prompt)
                     _forward_to_admin(f"✨ **تحسين وصف فيديو (موافقة)**\n\n**من:** {user_info}\n**الأصلي:** `{original_prompt}`\n**المحسّن:** `{enhanced_prompt}`")
                 else:
                     _forward_to_admin(f"✍️ **تخطي تحسين وصف الفيديو**\n\n**من:** {user_context['user_info']}\n**الوصف المستخدم:** `{original_prompt}`")
@@ -411,16 +368,10 @@ def process_update(update, chat_sessions):
         gen_type = user_context.get('type')
         _forward_to_admin(f"📝 **وصف مُستلم**\n\n**من:** {user_info}\n**للعملية:** `{gen_type}`\n**النص:** `{prompt}`")
         if gen_type == 'image_gen':
-            USER_STATES[chat_id] = {
-                'state': 'awaiting_image_count_selection', 'type': 'image_gen', 'prompt': prompt,
-                'original_message_id': message_id, 'user_info': user_info
-            }
+            USER_STATES[chat_id] = { 'state': 'awaiting_image_count_selection', 'type': 'image_gen', 'prompt': prompt, 'original_message_id': message_id, 'user_info': user_info }
             tg.send_message(chat_id, "كم عدد الصور التي تريد إنشاءها؟", reply_markup=IMAGE_COUNT_SELECTION_KEYBOARD, reply_to_message_id=message_id)
         elif gen_type == 'image_edit':
-            USER_STATES[chat_id] = {
-                'state': 'awaiting_edit_prompt_enhance_confirmation', 'file_id': user_context['file_id'],
-                'original_prompt': prompt, 'original_message_id': message_id, 'user_info': user_info
-            }
+            USER_STATES[chat_id] = { 'state': 'awaiting_edit_prompt_enhance_confirmation', 'file_id': user_context['file_id'], 'original_prompt': prompt, 'original_message_id': message_id, 'user_info': user_info }
             tg.send_message(chat_id, "هل تريد تحسين الوصف؟ (سيتم تحليل الصورة لتقديم أفضل وصف)", reply_markup=PROMPT_ENHANCE_CONFIRMATION_KEYBOARD_EDIT, reply_to_message_id=message_id)
         elif gen_type == 'prompt_enhance':
             USER_STATES.pop(chat_id, None)
@@ -429,11 +380,7 @@ def process_update(update, chat_sessions):
             threading.Thread(target=enhance_prompt_worker, args=(chat_id, message_id, prompt, waiting_message_id, user_info)).start()
         elif gen_type in ['veo_from_text', 'sora_from_text', 'sora_pro_from_text']:
             model = gen_type.split('_')[0]
-            USER_STATES[chat_id] = {
-                'state': 'awaiting_video_prompt_enhance_confirmation', 'model': model if 'pro' not in gen_type else 'sora_pro',
-                'file_id': None, 'original_prompt': prompt, 'original_message_id': message_id,
-                'gen_type': 'from_text', 'user_info': user_info
-            }
+            USER_STATES[chat_id] = { 'state': 'awaiting_video_prompt_enhance_confirmation', 'model': model if 'pro' not in gen_type else 'sora_pro', 'file_id': None, 'original_prompt': prompt, 'original_message_id': message_id, 'gen_type': 'from_text', 'user_info': user_info }
             tg.send_message(chat_id, "هل تريد تحسين الوصف باستخدام الذكاء الاصطناعي؟", reply_markup=PROMPT_ENHANCE_CONFIRMATION_KEYBOARD, reply_to_message_id=message_id)
         return
 
@@ -453,10 +400,6 @@ def process_update(update, chat_sessions):
         _forward_to_admin(f"🎬 **وصف فيديو (مع صورة)**\n\n**من:** {user_info}\n**النص:** `{prompt}`")
         model = user_context.get('model')
         file_id = user_context.get('file_id')
-        USER_STATES[chat_id] = {
-            'state': 'awaiting_video_prompt_enhance_confirmation', 'model': model,
-            'file_id': file_id, 'original_prompt': prompt, 'original_message_id': message_id,
-            'gen_type': 'from_image', 'user_info': user_info
-        }
+        USER_STATES[chat_id] = { 'state': 'awaiting_video_prompt_enhance_confirmation', 'model': model, 'file_id': file_id, 'original_prompt': prompt, 'original_message_id': message_id, 'gen_type': 'from_image', 'user_info': user_info }
         tg.send_message(chat_id, "هل تريد تحسين الوصف باستخدام الذكاء الاصطناعي؟ (سيفهم الصورة لتحسين أفضل)", reply_markup=PROMPT_ENHANCE_CONFIRMATION_KEYBOARD, reply_to_message_id=message_id)
         return
