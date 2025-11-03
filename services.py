@@ -43,7 +43,6 @@ Keep the original subject’s upper body and pose intact, without distorting pro
 3D software viewport effect. Complete full body view, head to toe visible, subject at 50-55% of frame, standing on dark gray grid floor. 35-40 degree overhead angle. Complete UI: blue Y-axis left, RGB axis top-right, preview window bottom-left, top toolbar. Professional lighting, clear details, clear grid. Blender viewport style'''}]
 }
 
-# --- [جديد] تعليمات لتحسين الوصف مع وجود صورة ---
 PROMPT_ENHANCER_WITH_IMAGE_INSTRUCTION = {
     "parts": [{"text":'''you are a professional prompt engineer for an AI video generator. Your task is to analyze the provided image and the user's simple text idea. Based on both, create a detailed, rich, and effective prompt in English that describes a video scene. The prompt should animate the contents of the image according to the user's idea, follows this rules Subject: [Detailed description of the subject or main character with 15+ attributes, including appearance, clothing, age, emotional state]
 
@@ -92,7 +91,7 @@ def generate_gemini_response(chat_history, prompt_text, image_base64=None, syste
                     print(f"Response BLOCKED or invalid: {response_json}")
                     return "تم حظر الاستجابة.", None
             else: 
-                print(f"GEMINI API ERROR: Status {response.status_code} with key ...{api_key[-4:]}.")
+                print(f"GEMINI API ERROR: Status {response.status_code} with key ...{api_key[-4:]} - Response: {response.text}")
         except requests.exceptions.RequestException as e: 
             print(f"NETWORK ERROR to Gemini with key ...{api_key[-4:]}: {e}")
     return "خطأ في الاتصال بالخدمة.", None
@@ -100,7 +99,6 @@ def generate_gemini_response(chat_history, prompt_text, image_base64=None, syste
 def generate_enhanced_prompt(simple_prompt):
     return generate_gemini_response([], simple_prompt, system_instruction=PROMPT_ENHANCER_INSTRUCTION)
 
-# --- [جديد] دالة لتحسين الوصف مع الصورة ---
 def generate_enhanced_prompt_with_image(simple_prompt, image_base64):
     return generate_gemini_response([], simple_prompt, image_base64=image_base64, system_instruction=PROMPT_ENHANCER_WITH_IMAGE_INSTRUCTION)
 
@@ -108,14 +106,18 @@ def describe_image_with_gemini(image_base64):
     return generate_gemini_response([], "", image_base64=image_base64, system_instruction=IMAGE_DESCRIBER_INSTRUCTION)
 
 # --- خدمات BasedLabs (إنشاء الصور) ---
-def generate_image_from_prompt(prompt):
+def generate_image_from_prompt(prompt, image_count=1):
     start_url = "https://www.basedlabs.ai/api/generate/image/v2"
-    payload = { "prompt": prompt, "negative_prompt": "", "num_outputs": "1", "width": 1024, "height": 1024, "guidance_scale": 7.5, "num_inference_steps": 50, "selectedModel": {"id": 128, "versionInfo": {"modelPath": "fal-ai/imagen4/preview/ultra"}}, "model": "imagen3"}
+    payload = { "prompt": prompt, "negative_prompt": "", "num_outputs": str(image_count), "width": 1024, "height": 1024, "guidance_scale": 7.5, "num_inference_steps": 50, "selectedModel": {"id": 128, "versionInfo": {"modelPath": "fal-ai/imagen4/preview/ultra"}}, "model": "imagen3"}
     try:
         response_start = SESSION.post(start_url, data=json.dumps(payload), headers=BASEDLABS_HEADERS, timeout=20)
-        if response_start.status_code != 200: print(f"Error starting job: {response_start.text}"); return []
+        if response_start.status_code != 200: 
+            print(f"BasedLabs Error starting job: {response_start.status_code} - {response_start.text}")
+            return []
         start_data = response_start.json(); request_id = start_data.get("request_id"); history_id = start_data.get("historyId")
-        if not request_id or not history_id: print(f"Could not get request_id or history_id: {start_data}"); return []
+        if not request_id or not history_id: 
+            print(f"BasedLabs Could not get request_id or history_id: {start_data}")
+            return []
         poll_url = f"https://www.basedlabs.ai/api/generate/image/v2/{request_id}"; poll_payload = {"historyId": history_id}
         for _ in range(30):
             response_poll = SESSION.post(poll_url, data=json.dumps(poll_payload), headers=BASEDLABS_HEADERS, timeout=20)
@@ -125,12 +127,12 @@ def generate_image_from_prompt(prompt):
                     images_data = poll_data.get('history', {}).get('prediction', {}).get('images', [])
                     if images_data: return [img['url'] for img in images_data if 'url' in img]
             time.sleep(5)
-        print("Job timed out."); return []
-    except requests.exceptions.RequestException as e: print(f"An error occurred during API call: {e}"); return []
+        print("BasedLabs Job timed out."); return []
+    except requests.exceptions.RequestException as e: 
+        print(f"BasedLabs An error occurred during API call: {e}"); return []
 
 # --- خدمات تعديل الصور (Digen API) ---
 def _digen_upload_photo(image_path: str) -> str or None:
-    """الخطوة 1: رفع الصورة للحصول على رابط مرجعي."""
     print(f"Digen: Starting image upload: {image_path}")
     try:
         headers_presign = {
@@ -165,7 +167,6 @@ def _digen_upload_photo(image_path: str) -> str or None:
         return None
 
 def _digen_submit_task(prompt: str, reference_image_url: str) -> str or None:
-    """الخطوة 2: إرسال مهمة التوليد والحصول على jobID."""
     print("Digen: Submitting generation task for Job ID...")
     headers = {
         'User-Agent': "Mozilla/5.0", 'Accept': "application/json, text/plain, */*",
@@ -193,7 +194,6 @@ def _digen_submit_task(prompt: str, reference_image_url: str) -> str or None:
         return None
 
 def _digen_check_status(job_id: str) -> str or None:
-    """الخطوة 3: التحقق بشكل دوري من حالة المهمة حتى تكتمل."""
     print(f"Digen: Starting to check status for job: {job_id}")
     url = "https://api.digen.ai/v6/video/get_task_v2"
     payload = {"jobID": job_id}
@@ -209,24 +209,23 @@ def _digen_check_status(job_id: str) -> str or None:
             response.raise_for_status()
             data = response.json().get('data', {})
             status = data.get('status')
-            print(f"Digen: Attempt {attempt + 1}/40: Status is {status}")
+            print(f"Digen: Attempt {attempt + 1}/40 for job {job_id}: Status is {status}")
             if status == 4: # 4 = Completed
                 image_url = data.get('resource_urls', [{}])[0].get('image')
                 if image_url:
-                    print("Digen: Task completed! Image URL found.")
+                    print(f"Digen: Task {job_id} completed! Image URL found.")
                     return image_url
                 else:
-                    print(f"Digen: Status is 4 but no image URL found! Response: {data}")
+                    print(f"Digen: Status is 4 but no image URL found for job {job_id}! Response: {data}")
                     return None
             time.sleep(3)
         except Exception as e:
-            print(f"Digen: Error checking task status: {e}")
+            print(f"Digen: Error checking task status for job {job_id}: {e}")
             time.sleep(3)
     print(f"Digen: Polling timed out for job {job_id}.")
     return None
 
 def edit_image_with_digen(image_path, prompt):
-    """Orchestrates the full Digen image editing process."""
     reference_url = _digen_upload_photo(image_path)
     if not reference_url:
         return None
@@ -257,7 +256,9 @@ def _start_video_job(api_url, payload):
         response.raise_for_status()
         data = response.json()
         request_id, history_id = data.get("request_id"), data.get("historyId")
-        if not all([request_id, history_id]): return None
+        if not all([request_id, history_id]): 
+            print(f"Video start failed, missing IDs. Response: {data}")
+            return None
         return {"request_id": request_id, "history_id": history_id}
     except Exception as e:
         print(f"Video generation start failed: {e}"); return None
@@ -299,7 +300,6 @@ def start_kling_image_to_video_job(prompt, image_url, media_id):
     payload = {"prompt": prompt,"image_url": image_url,  "model": { "id": 118, "label": "Kling", "purpose": "Video", "type": "Checkpoint", "description": "Kling model for video generation", "baseModel": "Kling", "versionInfo": { "id": 167, "index": None, "name": "2.5 Turbo", "description": None, "modelId": 118, "trainedWords": [], "steps": None, "epochs": None, "clipSkip": None, "vaeId": None, "createdAt": "2025-09-23T21:57:59.791Z", "updatedAt": "2025-09-23T21:58:40.950Z", "publishedAt": None, "status": "Published", "trainingStatus": None, "trainingDetails": None, "inaccurate": False, "baseModel": "Kling", "baseModelType": None, "meta": {}, "earlyAccessTimeFrame": 0, "requireAuth": False, "settings": None, "availability": "Public", "creditCost": 50, "creditCostConfig": { "5": 50, "10": 100 }, "isActive": True, "modelPath": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video", "baseModelSetType": None, "type": "ImageToVideo", "uploadType": "Created", "isDefault": False, "autoUpscale": False, "files": [] }, "checkpoint": "" }, "width": 447, "height": 447, "duration": 10, "mediaId": "cmh8pnlhu06ne0rfh6sw7zyd9", "sourceMedia": image_url, "motion_bucket_id": 60, "generate_audio": True, "resolution": "720p", "aspect_ratio": "auto" }
     return _start_video_job("https://www.basedlabs.ai/api/generate/video", payload)
 
-# --- [جديد] دالة لموديل Kling Standard ---
 def start_kling_standard_image_to_video_job(prompt, image_url, media_id):
     print("Starting KLING (Standard) IMAGE-TO-VIDEO generation...")
     payload = { "prompt": prompt, "image_url": image_url, "model": { "id": 118, "label": "Kling", "purpose": "Video", "type": "Checkpoint", "description": "Kling model for video generation", "baseModel": "Kling", "versionInfo": { "id": 129, "index": None, "name": "2.1 Standard", "description": None, "modelId": 118, "trainedWords": [], "steps": None, "epochs": None, "clipSkip": None, "vaeId": None, "createdAt": "2025-06-19T01:47:31.721Z", "updatedAt": "2025-07-14T03:25:11.370Z", "publishedAt": None, "status": "Published", "trainingStatus": None, "trainingDetails": None, "inaccurate": False, "baseModel": "Kling", "baseModelType": None, "meta": {}, "earlyAccessTimeFrame": 0, "requireAuth": False, "settings": None, "availability": "Public", "creditCost": 50, "creditCostConfig": { "5": 50, "10": 100 }, "isActive": True, "modelPath": "fal-ai/kling-video/v2.1/standard/image-to-video", "baseModelSetType": None, "type": "ImageToVideo", "uploadType": "Created", "isDefault": False, "autoUpscale": False, "files": [] }, "checkpoint": "" }, "width": 1024, "height": 1024, "duration": 10, "mediaId": "cmhesrtdu05ia03cr84b439l6", "sourceMedia": image_url, "motion_bucket_id": 60, "generate_audio": True, "resolution": "720p", "aspect_ratio": "auto" }
@@ -318,8 +318,9 @@ def poll_for_video_result(request_id, history_id, cancel_event):
             if status == "COMPLETED":
                 return data.get("output")
             elif status == "FAILED":
+                print(f"Polling failed for request {request_id}. Full response: {data}")
                 return None
             time.sleep(5)
         except requests.exceptions.RequestException as e:
-            print(f"Polling failed: {e}"); return None
+            print(f"Polling failed for request {request_id}: {e}"); return None
     print("Polling timed out."); return None
